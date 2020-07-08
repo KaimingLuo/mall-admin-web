@@ -11,24 +11,27 @@
       </el-button>
     </el-card>
     <div class="table-container">
-      <el-table ref="menuTable"
-                style="width: 100%"
+      <el-table style="width: 100%"
                 :data="list"
-                v-loading="listLoading" border>
+                row-key="id"
+                :tree-props="{children: 'children', hasChildren: 'hasChildren'}"
+                v-loading="listLoading">
         <el-table-column label="编号" width="100" align="center">
           <template slot-scope="scope">{{scope.row.id}}</template>
         </el-table-column>
         <el-table-column label="菜单名称" align="center">
           <template slot-scope="scope">{{scope.row.title}}</template>
         </el-table-column>
+        <el-table-column label="前端图标" width="100" align="center">
+          <template slot-scope="scope">
+            <svg-icon :icon-class="scope.row.icon"></svg-icon>
+          </template>
+        </el-table-column>
         <el-table-column label="菜单级数" width="100" align="center">
           <template slot-scope="scope">{{scope.row.level | levelFilter}}</template>
         </el-table-column>
         <el-table-column label="前端名称" align="center">
           <template slot-scope="scope">{{scope.row.name}}</template>
-        </el-table-column>
-        <el-table-column label="前端图标" width="100" align="center">
-          <template slot-scope="scope"><svg-icon :icon-class="scope.row.icon"></svg-icon></template>
         </el-table-column>
         <el-table-column label="是否显示" width="100" align="center">
           <template slot-scope="scope">
@@ -43,14 +46,9 @@
         <el-table-column label="排序" width="100" align="center">
           <template slot-scope="scope">{{scope.row.sort }}</template>
         </el-table-column>
-        <el-table-column label="设置" width="120" align="center">
+        <el-table-column label="创建时间" align="center" prop="createTime">
           <template slot-scope="scope">
-            <el-button
-              size="mini"
-              type="text"
-              :disabled="scope.row.level | disableNextLevel"
-              @click="handleShowNextLevel(scope.$index, scope.row)">查看下级
-            </el-button>
+            <span>{{ scope.row.createTime | formatDateTime }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="200" align="center">
@@ -69,79 +67,48 @@
         </el-table-column>
       </el-table>
     </div>
-    <div class="pagination-container">
-      <el-pagination
-        background
-        @size-change="handleSizeChange"
-        @current-change="handleCurrentChange"
-        layout="total, sizes,prev, pager, next,jumper"
-        :page-size="listQuery.pageSize"
-        :page-sizes="[10,15,20]"
-        :current-page.sync="listQuery.pageNum"
-        :total="total">
-      </el-pagination>
+    <div>
+      <!-- 添加或修改菜单对话框 -->
+      <el-dialog :title="title" :visible.sync="open" :close-on-click-modal="false" append-to-body>
+        <menu-detail :is-edit="isEdit" :menuId="selectedMenuId" v-on:finishCommit="finishCommit()"></menu-detail>
+      </el-dialog>
     </div>
   </div>
 </template>
 
 <script>
-  import {fetchList,deleteMenu,updateMenu,updateHidden} from '@/api/menu'
+  import {fetchList, fetchTreeList, deleteMenu, updateMenu, updateHidden} from '@/api/menu';
+  import {formatDate} from '@/utils/date';
+  import MenuDetail from './components/MenuDetail';
 
   export default {
     name: "menuList",
+    components: {MenuDetail},
     data() {
       return {
-        list: null,
-        total: null,
+        list: [],
+        title: "",
+        // 是否显示弹出层
+        open: false,
         listLoading: true,
-        listQuery: {
-          pageNum: 1,
-          pageSize: 5
-        },
+        isEdit: false,
+        selectedMenuId: 0,
         parentId: 0
       }
     },
     created() {
-      this.resetParentId();
       this.getList();
     },
-    watch: {
-      $route(route) {
-        this.resetParentId();
-        this.getList();
-      }
-    },
     methods: {
-      resetParentId(){
-        this.listQuery.pageNum = 1;
-        if (this.$route.query.parentId != null) {
-          this.parentId = this.$route.query.parentId;
-        } else {
-          this.parentId = 0;
-        }
-      },
-      handleAddMenu() {
-        this.$router.push('/ums/addMenu');
-      },
       getList() {
         this.listLoading = true;
-        fetchList(this.parentId, this.listQuery).then(response => {
+        fetchTreeList().then(response => {
           this.listLoading = false;
-          this.list = response.data.list;
-          this.total = response.data.total;
+          this.list = response.data;
         });
       },
-      handleSizeChange(val) {
-        this.listQuery.pageNum = 1;
-        this.listQuery.pageSize = val;
-        this.getList();
-      },
-      handleCurrentChange(val) {
-        this.listQuery.pageNum = val;
-        this.getList();
-      },
       handleHiddenChange(index, row) {
-        updateHidden(row.id,{hidden:row.hidden}).then(response=>{
+        updateHidden(row.id, {hidden: row.hidden}).then(response => {
           this.$message({
             message: '修改成功',
             type: 'success',
@@ -149,11 +116,26 @@
           });
         });
       },
-      handleShowNextLevel(index, row) {
-        this.$router.push({path: '/ums/menu', query: {parentId: row.id}})
+      refresh() {
+        this.getList();
+      },
+      closeDialog() {
+        this.open = false;
+      },
+      handleAddMenu() {
+        this.isEdit = false;
+        this.title = "添加菜单";
+        this.open = true;
       },
       handleUpdate(index, row) {
-        this.$router.push({path:'/ums/updateMenu',query:{id:row.id}});
+        this.selectedMenuId = row.id;
+        this.isEdit = true;
+        this.title = "修改菜单";
+        this.open = true;
+      },
+      finishCommit() {
+        this.refresh();
+        this.closeDialog();
       },
       handleDelete(index, row) {
         this.$confirm('是否要删除该菜单', '提示', {
@@ -180,12 +162,12 @@
           return '二级';
         }
       },
-      disableNextLevel(value) {
-        if (value === 0) {
-          return false;
-        } else {
-          return true;
+      formatDateTime(time) {
+        if (time == null || time === '') {
+          return 'N/A';
         }
+        let date = new Date(time);
+        return formatDate(date, 'yyyy-MM-dd hh:mm:ss')
       }
     }
   }
