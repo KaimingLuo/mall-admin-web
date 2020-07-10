@@ -36,6 +36,7 @@
           </span>
           </el-input>
         </el-form-item>
+        <el-checkbox v-model="loginForm.rememberMe" style="margin:0px 0px 25px 0px;">记住密码</el-checkbox>
         <el-form-item style="margin-bottom: 60px;text-align: center">
           <el-button style="width: 45%" type="primary" :loading="loading" @click.native.prevent="handleLogin">
             登录
@@ -54,9 +55,11 @@
       :center="true"
       width="30%">
       <div style="text-align: center">
-        <span class="font-title-large"><span class="color-main font-extra-large">关注公众号</span>回复<span class="color-main font-extra-large">体验</span>获取体验账号</span>
+        <span class="font-title-large"><span class="color-main font-extra-large">关注公众号</span>回复<span
+          class="color-main font-extra-large">体验</span>获取体验账号</span>
         <br>
-        <img src="http://macro-oss.oss-cn-shenzhen.aliyuncs.com/mall/banner/qrcode_for_macrozheng_258.jpg" width="160" height="160" style="margin-top: 10px">
+        <img src="http://macro-oss.oss-cn-shenzhen.aliyuncs.com/mall/banner/qrcode_for_macrozheng_258.jpg" width="160"
+             height="160" style="margin-top: 10px">
       </div>
       <span slot="footer" class="dialog-footer">
     <el-button type="primary" @click="dialogConfirm">确定</el-button>
@@ -67,7 +70,8 @@
 
 <script>
   import {isvalidUsername} from '@/utils/validate';
-  import {setSupport,getSupport,setCookie,getCookie} from '@/utils/support';
+  import {setSupport, getSupport, setCookie, getCookie, removeCookie} from '@/utils/support';
+  import {encrypt, decrypt} from '@/utils/jsencrypt';
   import login_center_bg from '@/assets/images/login_center_bg.png'
 
   export default {
@@ -91,6 +95,7 @@
         loginForm: {
           username: '',
           password: '',
+          rememberMe: false,
         },
         loginRules: {
           username: [{required: true, trigger: 'blur', validator: validateUsername}],
@@ -99,19 +104,19 @@
         loading: false,
         pwdType: 'password',
         login_center_bg,
-        dialogVisible:false,
-        supportDialogVisible:false
+        dialogVisible: false,
+        supportDialogVisible: false
       }
     },
     created() {
-      this.loginForm.username = getCookie("username");
-      this.loginForm.password = getCookie("password");
-      if(this.loginForm.username === undefined||this.loginForm.username==null||this.loginForm.username===''){
-        this.loginForm.username = 'admin';
-      }
-      if(this.loginForm.password === undefined||this.loginForm.password==null){
-        this.loginForm.password = '';
-      }
+      const username = getCookie("username");
+      const password = getCookie("password");
+      const rememberMe = getCookie("rememberMe");
+      this.loginForm = {
+        username: username || '',
+        password: password ? decrypt(password) : '',
+        rememberMe: Boolean(rememberMe)
+      };
     },
     methods: {
       showPwd() {
@@ -130,10 +135,17 @@
             //   return;
             // }
             this.loading = true;
+            if (this.loginForm.rememberMe) {
+              setCookie("username", this.loginForm.username, 15);
+              setCookie("password", encrypt(this.loginForm.password), 15);
+              setCookie("rememberMe", this.loginForm.rememberMe, 15);
+            } else {
+              removeCookie("username");
+              removeCookie("password");
+              removeCookie("rememberMe");
+            }
             this.$store.dispatch('Login', this.loginForm).then(() => {
               this.loading = false;
-              setCookie("username",this.loginForm.username,15);
-              setCookie("password",this.loginForm.password,15);
               this.$router.push({path: '/'})
             }).catch(() => {
               this.loading = false
@@ -144,14 +156,14 @@
           }
         })
       },
-      handleTry(){
-        this.dialogVisible =true
+      handleTry() {
+        this.dialogVisible = true
       },
-      dialogConfirm(){
-        this.dialogVisible =false;
+      dialogConfirm() {
+        this.dialogVisible = false;
         setSupport(true);
       },
-      dialogCancel(){
+      dialogCancel() {
         this.dialogVisible = false;
         setSupport(false);
       }
